@@ -104,25 +104,8 @@ jobs:
       - name: Publicar el código de la app en S3
         run: aws s3 cp app/ "s3://$BUCKET/app/" --recursive --exclude "__pycache__/*"
 
-      - name: Desplegar (instance refresh del Auto Scaling Group)
-        run: |
-          ID=$(aws autoscaling start-instance-refresh \
-            --auto-scaling-group-name "${PROJECT}-asg" \
-            --preferences '{"MinHealthyPercentage":50,"InstanceWarmup":120}' \
-            --query InstanceRefreshId --output text)
-          echo "Instance refresh: $ID"
-          for i in $(seq 1 60); do
-            ESTADO=$(aws autoscaling describe-instance-refreshes \
-              --auto-scaling-group-name "${PROJECT}-asg" --instance-refresh-ids "$ID" \
-              --query 'InstanceRefreshes[0].Status' --output text)
-            echo "estado=$ESTADO"
-            case "$ESTADO" in
-              Successful) exit 0 ;;
-              Failed|Cancelled|RollbackSuccessful|RollbackFailed) exit 1 ;;
-            esac
-            sleep 20
-          done
-          echo "Tiempo de espera agotado"; exit 1
+      - name: Desplegar (reemplazo gradual de las instancias del ASG)
+        run: bash scripts/despliegue_gradual.sh "$PROJECT"
 
       - uses: actions/setup-python@v5
         with:

@@ -172,7 +172,7 @@ terraform plan -var="app_version=1.2.0" -out=tfplan
 *"**provider.tf** define el proveedor AWS y la región, **sin credenciales en el código**. **variables.tf** parametriza la red, el cómputo y la base de datos; la contraseña es **sensible** y tiene validación. **main.tf** crea todo: la red, los Security Groups, RDS con su réplica, S3, el balanceador, el Auto Scaling Group y el dashboard de CloudWatch. **user_data.sh** es lo que ejecuta cada EC2 al arrancar: descarga la app desde S3 y la levanta. **outputs.tf** entrega la URL y los endpoints. El **terraform.tfvars** con la contraseña **no se sube a Git**; solo el ejemplo. Nada está creado a mano."*
 
 **Cuando termine el plan:**
-*"El plan detecta un solo cambio, la **versión de la aplicación**: Terraform crea una versión nueva del Launch Template y el Auto Scaling Group reemplaza las instancias de una en una, sin cortar el servicio."*
+*"El plan detecta un solo cambio, la **versión de la aplicación**: Terraform crea una versión nueva del Launch Template y actualiza el Auto Scaling Group para que las instancias nuevas arranquen con esa versión; el pipeline es el que las reemplaza de una en una, sin cortar el servicio."*
 
 ```bash
 terraform apply tfplan

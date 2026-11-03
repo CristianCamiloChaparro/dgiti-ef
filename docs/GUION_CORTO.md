@@ -55,7 +55,7 @@ terraform plan -var="app_version=1.1.0" -out=tfplan
 *"**provider.tf** define el proveedor AWS y la región, **sin credenciales en el código**. **variables.tf** parametriza la red, el cómputo y la base de datos; la contraseña es **sensible** y tiene validación. **main.tf** crea todo: la red, los Security Groups, RDS con su réplica, S3, el balanceador, el Auto Scaling Group y el dashboard de CloudWatch. **user_data.sh** es lo que ejecuta cada EC2 al arrancar: descarga la app desde S3 y la levanta. **outputs.tf** entrega la URL y los endpoints. El **terraform.tfvars** con la contraseña **no se sube a Git**; solo el ejemplo. Nada está creado a mano."*
 
 **Cuando termine el plan:**
-*"El plan detecta un solo cambio, la **versión de la aplicación**: Terraform crea una versión nueva del Launch Template y el Auto Scaling Group reemplaza las instancias de una en una, sin cortar el servicio."*
+*"El plan detecta un solo cambio, la **versión de la aplicación**: Terraform crea una versión nueva del Launch Template y actualiza el Auto Scaling Group para que las instancias nuevas arranquen con esa versión; el pipeline es el que las reemplaza de una en una, sin cortar el servicio."*
 
 ```bash
 terraform apply tfplan
@@ -82,7 +82,7 @@ En la **terminal 1** de Git Bash:
 
 ### 3:10 – 4:10 · Pipeline CI/CD (60 s)
 **1.** GitHub → archivo `.github/workflows/ci-cd.yml` abierto (10 s):
-*"El pipeline corre con cada push a main y tiene **tres etapas**. La uno valida el código con **flake8** y corre **15 pruebas unitarias**. La dos valida Terraform con **fmt, validate y test**. Si las dos pasan, la tres **despliega**: se autentica en mi cuenta con **secretos de GitHub**, publica el código en S3, hace un **instance refresh** del Auto Scaling Group y corre **pruebas de integración contra el balanceador real**."*
+*"El pipeline corre con cada push a main y tiene **tres etapas**. La uno valida el código con **flake8** y corre **15 pruebas unitarias**. La dos valida Terraform con **fmt, validate y test**. Si las dos pasan, la tres **despliega**: se autentica en mi cuenta con **secretos de GitHub**, publica el código en S3, **reemplaza las instancias del Auto Scaling Group de una en una** y corre **pruebas de integración contra el balanceador real**."*
 
 **2.** **Settings → Secrets and variables → Actions** (5 s):
 *"Las credenciales están solo como secretos: se ven los nombres, nunca los valores."*
@@ -153,5 +153,5 @@ Si k6 marca **✗** en `http_req_duration`, agregar:
 | Escalado con CPU al 50 % | Deja margen para absorber picos mientras arrancan instancias nuevas |
 | IMDSv2 y RDS cifrado | Buenas prácticas de seguridad sin costo adicional |
 | Código en S3 con VPC endpoint | Las EC2 privadas descargan la app sin pasar por Internet |
-| Instance refresh gradual | El despliegue cambia las instancias de a una (mínimo 50 % sanas), sin cortar el servicio |
+| Reemplazo gradual en el pipeline | El despliegue cambia las instancias de a una y espera que la nueva esté sana; AWS Academy bloquea el *instance refresh* automático, por eso lo hace un script |
 | Estado de Terraform local | Cada integrante despliega en su propia cuenta; en producción iría en un backend S3 |

@@ -73,6 +73,6 @@ terraform -chdir=terraform destroy
 
 1. **Código**: flake8 + 15 pruebas unitarias con cobertura.
 2. **Terraform**: `fmt -check`, `validate` y `terraform test` con proveedor simulado.
-3. **Despliegue** (solo en `main` y con la variable `AWS_DEPLOY_ENABLED=true`): se autentica con los secretos `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` y `AWS_SESSION_TOKEN`, publica la app en S3, hace *instance refresh* del ASG, corre las pruebas de integración contra el ALB y guarda los reportes en S3.
+3. **Despliegue** (solo en `main` y con la variable `AWS_DEPLOY_ENABLED=true`): se autentica con los secretos `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY` y `AWS_SESSION_TOKEN`, publica la app en S3, reemplaza las instancias del ASG de una en una (`scripts/despliegue_gradual.sh`), corre las pruebas de integración contra el ALB y guarda los reportes en S3.
 
 Ninguna credencial está en el código: todas van en GitHub Secrets o en `~/.aws/credentials`.

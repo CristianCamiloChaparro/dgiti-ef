@@ -405,14 +405,9 @@ resource "aws_autoscaling_group" "app" {
     version = aws_launch_template.app.latest_version
   }
 
-  # Al cambiar el Launch Template, reemplaza las instancias de a poco.
-  instance_refresh {
-    strategy = "Rolling"
-    preferences {
-      min_healthy_percentage = 50
-      instance_warmup        = 120
-    }
-  }
+  # Sin bloque instance_refresh: AWS Academy prohíbe StartInstanceRefresh.
+  # Las instancias nuevas usan la última versión del Launch Template, y el
+  # pipeline las reemplaza de una en una (scripts/despliegue_gradual.sh).
 
   tag {
     key                 = "Name"
