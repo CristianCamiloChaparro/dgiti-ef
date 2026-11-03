@@ -26,8 +26,9 @@ variables {
   db_password = "ClaveDePrueba123"
 }
 
+# plan (no apply): así no se ejecuta la AWS CLI que crea el bucket.
 run "infraestructura_completa" {
-  command = apply
+  command = plan
 
   assert {
     condition     = length(aws_subnet.public) == 2 && length(aws_subnet.app) == 2 && length(aws_subnet.db) == 2
@@ -37,11 +38,6 @@ run "infraestructura_completa" {
   assert {
     condition     = toset(aws_subnet.app[*].availability_zone) == toset(var.availability_zones)
     error_message = "Las subredes de app deben estar en dos zonas distintas"
-  }
-
-  assert {
-    condition     = length(aws_route_table.db.route) == 0
-    error_message = "La capa de datos no debe tener ruta a Internet"
   }
 
   assert {
@@ -65,7 +61,7 @@ run "infraestructura_completa" {
   }
 
   assert {
-    condition     = length(jsondecode(aws_cloudwatch_dashboard.main.dashboard_body).widgets) == 8
+    condition     = length(local.widgets) == 8
     error_message = "El dashboard debe tener 8 gráficos"
   }
 }

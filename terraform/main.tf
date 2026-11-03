@@ -251,24 +251,26 @@ resource "aws_db_instance" "replica" {
 # =====================================================================
 # 4. ALMACENAMIENTO: bucket S3 con el código de la app y los reportes de CI
 # =====================================================================
-resource "aws_s3_bucket" "artifacts" {
-  bucket        = "${local.name}-artifacts-${data.aws_caller_identity.current.account_id}"
-  force_destroy = true
-  tags          = { Name = "${local.name}-artifacts" }
-}
+# AWS Academy prohíbe s3:GetBucketObjectLockConfiguration, que el recurso
+# aws_s3_bucket necesita para leer el bucket. Por eso Terraform crea (y en
+# destroy elimina) el bucket con la AWS CLI, y bloquea el acceso público.
+resource "terraform_data" "artifacts_bucket" {
+  input = "${local.name}-artifacts-${data.aws_caller_identity.current.account_id}"
 
-resource "aws_s3_bucket_public_access_block" "artifacts" {
-  bucket                  = aws_s3_bucket.artifacts.id
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
+  provisioner "local-exec" {
+    command = "aws s3api create-bucket --bucket ${self.input} --region ${var.aws_region} && aws s3api put-public-access-block --bucket ${self.input} --public-access-block-configuration BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+  }
+
+  provisioner "local-exec" {
+    when    = destroy
+    command = "aws s3 rb s3://${self.input} --force"
+  }
 }
 
 resource "aws_s3_object" "app" {
   for_each = fileset("${path.module}/../app", "*")
 
-  bucket = aws_s3_bucket.artifacts.id
+  bucket = terraform_data.artifacts_bucket.output
   key    = "app/${each.value}"
   source = "${path.module}/../app/${each.value}"
   etag   = filemd5("${path.module}/../app/${each.value}")
@@ -345,7 +347,7 @@ resource "aws_launch_template" "app" {
 
   user_data = base64encode(templatefile("${path.module}/user_data.sh", {
     region          = var.aws_region
-    bucket          = aws_s3_bucket.artifacts.id
+    bucket          = terraform_data.artifacts_bucket.output
     app_version     = var.app_version
     db_host         = aws_db_instance.primary.address
     db_replica_host = aws_db_instance.replica.address
@@ -363,6 +365,22 @@ resource "aws_launch_template" "app" {
   lifecycle {
     ignore_changes = [image_id]
   }
+}
+
+# En una cuenta nueva el rol vinculado de Auto Scaling todavía no existe; si
+# AWS lo crea junto con el ASG, los primeros lanzamientos fallan porque el rol
+# aún no está disponible. Se crea antes y se esperan 30 s (si ya existe, el
+# error de la CLI se ignora).
+resource "terraform_data" "autoscaling_service_role" {
+  provisioner "local-exec" {
+    command    = "aws iam create-service-linked-role --aws-service-name autoscaling.amazonaws.com"
+    on_failure = continue
+  }
+}
+
+resource "time_sleep" "autoscaling_service_role" {
+  create_duration = "30s"
+  depends_on      = [terraform_data.autoscaling_service_role]
 }
 
 resource "aws_autoscaling_group" "app" {
@@ -407,7 +425,7 @@ resource "aws_autoscaling_group" "app" {
     ignore_changes = [desired_capacity]
   }
 
-  depends_on = [aws_s3_object.app, aws_route_table_association.app]
+  depends_on = [aws_s3_object.app, aws_route_table_association.app, time_sleep.autoscaling_service_role]
 }
 
 resource "aws_autoscaling_policy" "cpu" {

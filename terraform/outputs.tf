@@ -27,7 +27,7 @@ output "db_replica_endpoint" {
 }
 
 output "artifacts_bucket" {
-  value = aws_s3_bucket.artifacts.id
+  value = terraform_data.artifacts_bucket.output
 }
 
 output "dashboard_url" {

@@ -89,6 +89,16 @@ cd ..
 
 > Si sale un error en rojo, copia el mensaje completo y mándaselo a Cristian. Casi siempre basta con volver a ejecutar `terraform apply`: retoma desde donde quedó.
 
+**Si el error dice `Access denied when attempting to assume role ... AWSServiceRoleForAutoScaling`**
+(en una cuenta nueva, AWS a veces crea ese rol unos segundos tarde). El Auto Scaling Group sí quedó creado. Ejecuta esto, en orden, desde la carpeta `terraform`:
+```bash
+aws autoscaling suspend-processes --auto-scaling-group-name dgiti-ef-asg --scaling-processes Launch
+aws autoscaling resume-processes --auto-scaling-group-name dgiti-ef-asg --scaling-processes Launch
+terraform untaint aws_autoscaling_group.app
+terraform apply
+```
+En el `apply`, revisa que diga **`0 to destroy`** y escribe `yes`.
+
 ### Paso 4 · Comprobar que funciona
 Espera unos **3 minutos** a que arranquen los servidores. Luego, desde la carpeta `dgiti-ef`:
 ```bash
