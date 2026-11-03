@@ -490,7 +490,9 @@ locals {
 resource "aws_cloudwatch_dashboard" "main" {
   dashboard_name = "${local.name}-dashboard"
 
+  # Rango por defecto de 6 horas: se ven la prueba previa y la del video.
   dashboard_body = jsonencode({
+    start = "-PT6H"
     widgets = [
       for i, w in local.widgets : {
         type   = "metric"
