@@ -1,0 +1,145 @@
+name: CI-CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-east-1
+  PROJECT: dgiti-ef
+
+jobs:
+  # ---------------------------------------------------------------
+  # Etapa 1: validar el código de la aplicación y pruebas unitarias
+  # ---------------------------------------------------------------
+  app:
+    name: "1. Código: flake8 + pruebas unitarias"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      - name: Validar estilo (flake8)
+        run: flake8 app tests
+
+      - name: Pruebas unitarias con cobertura
+        run: |
+          mkdir -p reports
+          pytest tests/unit -v --cov=app --cov-report=term \
+            --junitxml=reports/unit-tests.xml
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: unit-reports
+          path: reports/
+
+  # ---------------------------------------------------------------
+  # Etapa 2: validar la infraestructura como código
+  # ---------------------------------------------------------------
+  terraform:
+    name: "2. Terraform: fmt + validate + test"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: terraform
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: terraform fmt
+        run: terraform fmt -check -recursive
+
+      - name: terraform init
+        run: terraform init -backend=false -input=false
+
+      - name: terraform validate
+        run: terraform validate
+
+      - name: terraform test (proveedor simulado)
+        run: terraform test
+
+  # ---------------------------------------------------------------
+  # Etapa 3: desplegar en AWS y pruebas de integración
+  # Solo en main y si la variable AWS_DEPLOY_ENABLED vale "true".
+  # ---------------------------------------------------------------
+  deploy:
+    name: "3. Despliegue en AWS + pruebas de integración"
+    needs: [app, terraform]
+    if: github.event_name != 'pull_request' && vars.AWS_DEPLOY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Credenciales de AWS Academy (desde GitHub Secrets)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Verificar la cuenta
+        run: aws sts get-caller-identity --query Account --output text
+
+      - name: Localizar recursos creados por Terraform
+        run: |
+          BUCKET=$(aws s3api list-buckets \
+            --query "Buckets[?starts_with(Name, '${PROJECT}-artifacts-')].Name | [0]" --output text)
+          ALB_DNS=$(aws elbv2 describe-load-balancers --names "${PROJECT}-alb" \
+            --query 'LoadBalancers[0].DNSName' --output text)
+          echo "bucket=$BUCKET  alb=$ALB_DNS"
+          echo "BUCKET=$BUCKET" >> "$GITHUB_ENV"
+          echo "BASE_URL=http://$ALB_DNS" >> "$GITHUB_ENV"
+
+      - name: Publicar el código de la app en S3
+        run: aws s3 cp app/ "s3://$BUCKET/app/" --recursive --exclude "__pycache__/*"
+
+      - name: Desplegar (instance refresh del Auto Scaling Group)
+        run: |
+          ID=$(aws autoscaling start-instance-refresh \
+            --auto-scaling-group-name "${PROJECT}-asg" \
+            --preferences '{"MinHealthyPercentage":50,"InstanceWarmup":120}' \
+            --query InstanceRefreshId --output text)
+          echo "Instance refresh: $ID"
+          for i in $(seq 1 60); do
+            ESTADO=$(aws autoscaling describe-instance-refreshes \
+              --auto-scaling-group-name "${PROJECT}-asg" --instance-refresh-ids "$ID" \
+              --query 'InstanceRefreshes[0].Status' --output text)
+            echo "estado=$ESTADO"
+            case "$ESTADO" in
+              Successful) exit 0 ;;
+              Failed|Cancelled|RollbackSuccessful|RollbackFailed) exit 1 ;;
+            esac
+            sleep 20
+          done
+          echo "Tiempo de espera agotado"; exit 1
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Pruebas de integración contra el balanceador
+        run: |
+          pip install pytest
+          mkdir -p reports
+          pytest tests/integration -v --junitxml=reports/integration-tests.xml
+
+      - uses: actions/download-artifact@v4
+        if: always()
+        with:
+          name: unit-reports
+          path: reports/
+
+      - name: Guardar reportes en S3
+        if: always()
+        run: aws s3 cp reports/ "s3://$BUCKET/ci/run-${{ github.run_number }}/" --recursive

@@ -1,0 +1,4 @@
+# Fin de línea LF aunque se clone en Windows: los scripts corren en Linux
+# y Terraform compara el hash de los archivos de app/ que sube a S3.
+* text=auto eol=lf
+*.png binary

@@ -1,0 +1,19 @@
+# Terraform: estado local y secretos (nunca a Git)
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+tfplan
+crash.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.coverage
+.pytest_cache/
+reports/
+
+# Resultados de k6
+loadtest/results/
