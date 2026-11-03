@@ -62,7 +62,7 @@ terraform apply tfplan
 terraform output
 ```
 Al ver **Apply complete!**:
-*"Aplicado. Y estos son los outputs: la URL del servicio, los endpoints de la base de datos, el bucket y el dashboard. Le paso a mi compañero."*
+*"Aplicado. Y estos son los outputs: la URL del servicio, los endpoints de la base de datos, el bucket y el dashboard. Ahora sigue el Integrante 2."*
 
 ---
 
